@@ -261,7 +261,7 @@
   #footer-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
   #footer-buttons button { flex: 1; white-space: nowrap; }
   #hint { color: var(--slate-soft); font-size: 11px; text-align: center; line-height: 1.5; }
-  #credit { text-align: center; font-size: 11px; margin-top: 4px; }   /* the page's only outbound link */
+  #credit { text-align: center; font-size: 11px; margin-top: 4px; color: var(--slate-soft); }   /* the page's only outbound link */
   #credit a { color: var(--slate-soft); text-decoration: underline dotted; }
   #credit a:hover { color: var(--accent-deep); }
 
@@ -577,7 +577,7 @@
         <button id="reset-room" class="danger">Reset</button>
       </div>
       <div id="hint">Drag a picture to move it, onto another wall to rehang it · drag empty space to look around<br>Ctrl-click to select several · Esc to deselect</div>
-      <div id="credit"><a href="https://ko-fi.com/simpletools" target="_blank" rel="noopener">Buy me a coffee</a></div>
+      <div id="credit">Find the tool useful? <a href="https://ko-fi.com/simpletools" target="_blank" rel="noopener">Buy me a coffee</a></div>
       <input type="file" id="import-file" accept=".json,application/json" hidden>
       <input type="file" id="image-file" accept="image/*" hidden>
     </div>
