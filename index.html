@@ -260,10 +260,45 @@
   }
   #footer-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
   #footer-buttons button { flex: 1; white-space: nowrap; }
-  #hint { color: var(--slate-soft); font-size: 11px; text-align: center; line-height: 1.5; }
-  #credit { text-align: center; font-size: 11px; margin-top: 4px; color: var(--slate-soft); }   /* the page's only outbound link */
-  #credit a { color: var(--slate-soft); text-decoration: underline dotted; }
+  #hint { color: var(--slate-mid); font-size: 11px; text-align: center; line-height: 1.5; }
+  #credit { text-align: center; font-size: 11px; margin-top: 4px; color: var(--slate); }   /* the page's only outbound link */
+  #credit a { color: var(--slate); text-decoration: underline; }
   #credit a:hover { color: var(--accent-deep); }
+
+  /* ---------- small screens (phones): panel slides in over the viewport ---------- */
+  #mobile-notice, #panel-toggle, #panel-close, #panel-scrim { display: none; }
+  @media (max-width: 760px) {
+    body { flex-direction: column; }
+    #mobile-notice {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; font-size: 12.5px; line-height: 1.4;
+      background: var(--accent); color: #fff;
+    }
+    #mobile-notice span { flex: 1; }
+    #mobile-notice button {
+      flex: none; width: 28px; height: 28px; padding: 0; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.5); background: transparent; color: #fff; font-size: 16px; line-height: 1;
+    }
+    #mobile-notice[hidden] { display: none; }
+    #panel {
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
+      width: min(330px, 88vw); min-width: 0;
+      box-shadow: 4px 0 18px rgba(42,55,68,0.25);
+      transform: translateX(-102%);
+      transition: transform 0.22s ease;
+    }
+    body.panel-open #panel { transform: none; }
+    #panel h1 { margin-right: 34px; }   /* room for the close button */
+    #panel-close {
+      display: block; position: absolute; top: 10px; right: 10px; z-index: 1;
+      width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1;
+    }
+    #panel-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(42,55,68,0.35); }
+    body.panel-open #panel-scrim { display: block; }
+    #panel-toggle { display: inline-block; }
+    #vp-toolbar { flex-wrap: wrap; max-width: calc(100% - 20px); }
+    #measure-hint { top: auto; bottom: 10px; right: 10px; }
+  }
 
   /* ---------- segmented align buttons ---------- */
   .seg { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
@@ -406,7 +441,13 @@
 </style>
 </head>
 <body>
+  <div id="mobile-notice" hidden>
+    <span>Exhibition Planner is designed for a desktop or laptop. It works on a phone, but with a small screen and no mouse it's harder to place things precisely.</span>
+    <button id="mobile-notice-close" title="Dismiss" aria-label="Dismiss">×</button>
+  </div>
+  <div id="panel-scrim"></div>
   <div id="panel">
+    <button id="panel-close" title="Close the controls" aria-label="Close the controls">×</button>
     <div id="panel-scroll">
       <h1><input type="text" id="page-title" value="Gallery Space" placeholder="Gallery Space" maxlength="80" spellcheck="false" autocomplete="off" title="Click to rename this plan — the name is saved with the layout"><span class="dot">.</span><span id="page-title-mirror" aria-hidden="true"></span></h1>
       <p id="tagline">Exhibition Planner</p>
@@ -585,6 +626,7 @@
 
   <div id="viewport">
     <div id="vp-toolbar">
+      <button id="panel-toggle" title="Show the controls">☰ Controls</button>
       <button id="measure-toggle" title="Click two points to measure between them">📏 Measure</button>
       <button id="measure-clear" title="Remove all measurements" hidden>Clear</button>
       <label title="Show distances to the floor and neighbouring pieces for every selected piece — select a whole row to check its spacing">
@@ -595,7 +637,7 @@
       </label>
       <input type="number" id="keepout-cm" min="0" max="50" step="0.1" title="Keepout per wall in cm, split between its two ends (4.6 cm is the venue's figure)">
       <span class="unit">cm</span>
-      <button id="snapshot" title="Save a picture of this view as a PNG file">📷 Snapshot</button>
+      <button id="snapshot" title="Save a picture of this view as a PNG file">Screenshot</button>
     </div>
     <div id="measure-hint" hidden>Click a first point — corners and edges snap. Click a measurement's label to remove it. Esc to finish.</div>
   </div>
@@ -3173,6 +3215,31 @@ window.PLANNER_PAINTS = [
   }
   window.addEventListener('resize', onResize);
   onResize();
+
+  // ---------- small screens ----------
+  // Below 760 px the CSS turns the side panel into a drawer over the viewport
+  // (closed by default) and shows a one-time "made for desktop" notice. On a
+  // desktop none of these elements are visible, so this is inert there.
+  (function () {
+    var notice = document.getElementById('mobile-notice');
+    var NOTICE_KEY = 'planner-mobile-notice-dismissed';
+    var dismissed = false;
+    try { dismissed = localStorage.getItem(NOTICE_KEY) === '1'; } catch (e) { /* private mode etc. */ }
+    if (!dismissed) notice.hidden = false;
+    document.getElementById('mobile-notice-close').addEventListener('click', function () {
+      notice.hidden = true;
+      try { localStorage.setItem(NOTICE_KEY, '1'); } catch (e) { /* ignore */ }
+      onResize();                       // the viewport just grew by the bar's height
+    });
+
+    function setPanel(open) { document.body.classList.toggle('panel-open', open); }
+    document.getElementById('panel-toggle').addEventListener('click', function () { setPanel(true); });
+    document.getElementById('panel-close').addEventListener('click', function () { setPanel(false); });
+    document.getElementById('panel-scrim').addEventListener('click', function () { setPanel(false); });
+    window.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && document.body.classList.contains('panel-open')) setPanel(false);
+    });
+  })();
 
   (function animate() {
     requestAnimationFrame(animate);
