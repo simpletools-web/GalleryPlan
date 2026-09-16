@@ -6033,6 +6033,11 @@ window.PLANNER_PAINTS = [
     var w = viewport.clientWidth, h = viewport.clientHeight;
     var scale = Math.min(2, 4096 / Math.max(w, h));
     var pw = Math.round(w * scale), ph = Math.round(h * scale);
+    // Pixel ratio 1 for the capture: otherwise the drawing buffer is
+    // pw × devicePixelRatio wide and the copy below would only take its
+    // top-left corner (a zoomed-in, off-centre picture on HiDPI screens).
+    var ratio = renderer.getPixelRatio();
+    renderer.setPixelRatio(1);
     renderer.setSize(pw, ph, false);
     renderer.render(scene, camera);
     // Copy the frame onto a 2D canvas in the same task (the WebGL buffer is
@@ -6041,12 +6046,13 @@ window.PLANNER_PAINTS = [
     out.width = pw;
     out.height = ph;
     var ctx = out.getContext('2d');
-    ctx.drawImage(renderer.domElement, 0, 0);
+    ctx.drawImage(renderer.domElement, 0, 0, pw, ph);
     drawSnapshotCaption(ctx, pw, ph, scale);
     out.toBlob(function (blob) {
       if (blob) callback(blob);
       else alert('Could not capture the view.');
     }, 'image/png');
+    renderer.setPixelRatio(ratio);
     onResize();
   }
 
