@@ -217,6 +217,25 @@
     flex: 1; min-width: 0; font-weight: 650;
     border-color: transparent; background: transparent;
   }
+  /* Folded cards: only the header row shows; the arrow turns to point down when open */
+  .art-card .card-top .fold, .spot-card .spot-head .fold {
+    padding: 3px 3px; color: var(--slate-soft); flex: 0 0 auto;
+  }
+  .art-card .card-top .fold svg, .spot-card .spot-head .fold svg {
+    transform: rotate(90deg); transition: transform .15s;
+  }
+  .art-card.collapsed .card-top .fold svg, .spot-card.collapsed .spot-head .fold svg { transform: none; }
+  .art-card.collapsed > :not(.card-top), .spot-card.collapsed > :not(.spot-head) { display: none; }
+  .art-card.collapsed .card-top, .spot-card.collapsed .spot-head { margin-bottom: 0; }
+  .art-card .card-sum {
+    display: none; flex: 0 1 auto; min-width: 0; max-width: 42%;
+    font-size: 11px; color: var(--slate-soft);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .art-card .card-sum.wide { flex: 1 1 0; max-width: none; }   /* text cards: the snippet stands in for a name */
+  .art-card.collapsed .card-sum { display: block; }
+  .art-card .card-spacer { flex: 1; }
+  .art-card.collapsed .card-spacer { display: none; }
   .art-card .card-top input[type="text"]:hover,
   .art-card .card-top input[type="text"]:focus { border-color: var(--line); background: #fff; }
   .art-card .dims-row {
@@ -2337,6 +2356,9 @@ window.PLANNER_PAINTS = [
   // reassigns it — the same path Import uses.
   var state = defaultState();
   var selection = [];                 // ordered item ids; [0] is the align anchor
+  var openCards = {};                 // item id -> true while its card shows its settings
+  var openFloods = {};                // flood id -> true, same for the flood cards
+  var lastSelection = [];             // what was selected before the last change (cards fold on deselect)
   var saveTimer = null;
   var saveFullWarned = false;
   var stateLoaded = false;            // true once boot has put the saved layout in `state`
@@ -3749,8 +3771,14 @@ window.PLANNER_PAINTS = [
 
   function updateSelectionUI() {
     applySelectionHighlight();
+    // A card opens when its piece is selected and folds again when it is
+    // deselected; the arrow on the card opens or folds it by hand.
+    lastSelection.forEach(function (id) { if (!isSelected(id)) delete openCards[id]; });
+    selection.forEach(function (id) { openCards[id] = true; });
+    lastSelection = selection.slice();
     document.querySelectorAll('.art-card').forEach(function (card) {
       card.classList.toggle('selected', isSelected(card.dataset.artworkId));
+      card.classList.toggle('collapsed', !openCards[card.dataset.artworkId]);
     });
     var bar = document.getElementById('align-bar');
     bar.hidden = selection.length < 1;
@@ -4722,7 +4750,26 @@ window.PLANNER_PAINTS = [
 
   function itemCardClass(a) {
     return 'art-card' + (isSelected(a.id) ? ' selected' : '') + (a.hidden ? ' is-hidden' : '') +
+      (openCards[a.id] ? '' : ' collapsed') +
       (a.type !== 'plinth' && !wallIsOn(a.wall) ? ' wall-off' : '');
+  }
+
+  var CHEVRON_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+
+  // The arrow at the left of every card: folds the settings away or shows them.
+  function foldButtonHtml(attr) {
+    return '<button class="icon fold" ' + attr + '="toggle-open" title="Show or hide the settings" aria-label="Show or hide the settings">' + CHEVRON_SVG + '</button>';
+  }
+
+  // One-line reminder shown in a folded card's header so a piece can be found
+  // without opening it: its size, or the start of its text.
+  function cardSummaryHtml(a) {
+    var s, cls = 'card-sum';
+    if (a.type === 'text') { s = (a.text || '').replace(/\s+/g, ' ').trim().slice(0, 40) || '(empty)'; cls += ' wide'; }
+    else if (a.type === 'plinth') s = displayLen(a.w) + ' × ' + displayLen(a.d) + ' × ' + displayLen(a.h);
+    else if (a.type === 'shelf') s = displayLen(a.w) + ' × ' + displayLen(a.d);
+    else s = displayLen(a.w) + ' × ' + displayLen(a.h);
+    return '<span class="' + cls + '" title="' + escapeHtml(s) + ' ' + unitLabel() + '">' + escapeHtml(s) + '</span>';
   }
 
   var EYE_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -4778,7 +4825,9 @@ window.PLANNER_PAINTS = [
     card.dataset.artworkId = a.id;
     card.innerHTML =
       '<div class="card-top">' +
+        foldButtonHtml('data-action') +
         '<input type="text" data-field="name" value="' + escapeHtml(a.name) + '">' +
+        cardSummaryHtml(a) +
         hideButtonHtml(a) +
         '<button class="icon" data-action="duplicate" title="Duplicate">⧉</button>' +
         '<button class="icon danger" data-action="delete" title="Delete">✕</button>' +
@@ -4845,8 +4894,10 @@ window.PLANNER_PAINTS = [
     card.dataset.artworkId = a.id;
     card.innerHTML =
       '<div class="card-top">' +
+        foldButtonHtml('data-action') +
         '<span class="kind-tag">SHELF</span>' +
         '<input type="text" data-field="name" value="' + escapeHtml(a.name) + '">' +
+        cardSummaryHtml(a) +
         hideButtonHtml(a) +
         '<button class="icon" data-action="duplicate" title="Duplicate">⧉</button>' +
         '<button class="icon danger" data-action="delete" title="Delete">✕</button>' +
@@ -4899,8 +4950,10 @@ window.PLANNER_PAINTS = [
     card.dataset.artworkId = a.id;
     card.innerHTML =
       '<div class="card-top">' +
+        foldButtonHtml('data-action') +
         '<span class="kind-tag">PLINTH</span>' +
         '<input type="text" data-field="name" value="' + escapeHtml(a.name) + '">' +
+        cardSummaryHtml(a) +
         hideButtonHtml(a) +
         '<button class="icon" data-action="duplicate" title="Duplicate">⧉</button>' +
         '<button class="icon danger" data-action="delete" title="Delete">✕</button>' +
@@ -4940,8 +4993,10 @@ window.PLANNER_PAINTS = [
     card.dataset.artworkId = a.id;
     card.innerHTML =
       '<div class="card-top">' +
+        foldButtonHtml('data-action') +
         '<span class="kind-tag">TEXT</span>' +
-        '<span style="flex:1"></span>' +
+        cardSummaryHtml(a) +
+        '<span class="card-spacer"></span>' +
         hideButtonHtml(a) +
         '<button class="icon" data-action="duplicate" title="Duplicate">⧉</button>' +
         '<button class="icon danger" data-action="delete" title="Delete">✕</button>' +
@@ -5083,6 +5138,11 @@ window.PLANNER_PAINTS = [
 
     var actionEl = event.target.closest('[data-action]');
     var action = actionEl ? actionEl.dataset.action : undefined;
+    if (action === 'toggle-open') {
+      if (openCards[a.id]) delete openCards[a.id]; else openCards[a.id] = true;
+      card.classList.toggle('collapsed', !openCards[a.id]);
+      return;                          // fold by hand: selection is left alone
+    }
     if (action === 'toggle-hidden') {
       a.hidden = !a.hidden;
       if (a.hidden) selection = selection.filter(function (id) { return id !== a.id; });
@@ -5783,7 +5843,10 @@ window.PLANNER_PAINTS = [
   modeSelect.addEventListener('change', function () {
     var mode = modeSelect.value;
     state.lighting.mode = mode === 'floods' ? 'floods' : 'none';
-    if (mode === 'floods' && !state.lighting.floods.length) seedFloods(state);
+    if (mode === 'floods' && !state.lighting.floods.length) {
+      seedFloods(state);
+      state.lighting.floods.forEach(function (f) { openFloods[f.id] = true; });   // first floods start open
+    }
     syncLightingInputs();
     renderFloodsList();
     rebuildLighting();
@@ -5810,7 +5873,7 @@ window.PLANNER_PAINTS = [
       var on = wallIsOn(f.wall);
       var widthCm = Math.round(state.walls[f.wall].width * 100);
       var card = document.createElement('div');
-      card.className = 'spot-card' + (on ? '' : ' wall-off');
+      card.className = 'spot-card' + (on ? '' : ' wall-off') + (openFloods[f.id] ? '' : ' collapsed');
       card.dataset.floodId = f.id;
       var wallOptions = WALL_KEYS.map(function (k) {
         if (!wallIsOn(k) && k !== f.wall) return '';
@@ -5818,6 +5881,7 @@ window.PLANNER_PAINTS = [
       }).join('');
       card.innerHTML =
         '<div class="spot-head">' +
+          foldButtonHtml('data-faction') +
           '<span class="s-name">Flood ' + (i + 1) + '</span>' +
           '<select data-ffield="aim">' + aimOptionsHtml(f.aim) + '</select>' +
           '<button class="icon copy-all" data-faction="copy-all" title="Give every flood this arm, rise, beam, colour and brightness"' +
@@ -5894,6 +5958,8 @@ window.PLANNER_PAINTS = [
   function pingFloodCard(id) {
     var card = floodsList.querySelector('.spot-card[data-flood-id="' + id + '"]');
     if (!card) return;
+    openFloods[id] = true;             // clicking a flood in 3D opens its card
+    card.classList.remove('collapsed');
     card.scrollIntoView({ block: 'nearest' });
     card.classList.add('pinged');
     setTimeout(function () { card.classList.remove('pinged'); }, 900);
@@ -5949,9 +6015,16 @@ window.PLANNER_PAINTS = [
   }
 
   floodsList.addEventListener('click', function (event) {
-    var action = event.target.dataset.faction;
-    if (action !== 'delete' && action !== 'copy-all') return;
+    var actionEl = event.target.closest('[data-faction]');
+    var action = actionEl ? actionEl.dataset.faction : undefined;
     var card = event.target.closest('.spot-card');
+    if (action === 'toggle-open') {
+      var fid = card.dataset.floodId;
+      if (openFloods[fid]) delete openFloods[fid]; else openFloods[fid] = true;
+      card.classList.toggle('collapsed', !openFloods[fid]);
+      return;
+    }
+    if (action !== 'delete' && action !== 'copy-all') return;
     if (action === 'copy-all') {
       var src = findFlood(card.dataset.floodId);
       if (!src || state.lighting.floods.length < 2) return;
@@ -5966,7 +6039,9 @@ window.PLANNER_PAINTS = [
 
   document.getElementById('add-flood').addEventListener('click', function () {
     if (state.lighting.floods.length >= MAX_FLOODS) return;
-    state.lighting.floods.push(defaultFlood(state));
+    var nf = defaultFlood(state);
+    state.lighting.floods.push(nf);
+    openFloods[nf.id] = true;          // a new flood starts open so its settings are to hand
     renderFloodsList();
     rebuildLighting();
     scheduleSave();
